@@ -183,7 +183,7 @@ namespace SE_ProjectorAlignmentProfiles
             if (string.IsNullOrWhiteSpace(newProfileNameStr))
                 return;
 
-            newProfileNameStr = newProfileNameStr.Replace("/", "");
+            newProfileNameStr = newProfileNameStr.Replace('/', ' ');
 
             StringBuilder newCD = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(block.CustomData))
