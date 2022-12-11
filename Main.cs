@@ -17,6 +17,7 @@ namespace SE_ProjectorAlignmentProfiles
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_Projector), false)]
     public class ProjectorLogic : MyGameLogicComponent
     {
+        public static readonly char[] Newlines = Environment.NewLine.ToCharArray();
         IMyProjector block;
         static bool controlsAdded = false;
         AlignData? _selected;
@@ -27,6 +28,7 @@ namespace SE_ProjectorAlignmentProfiles
             {
                 _selected = value;
                 loadProfileBtn.UpdateVisual();
+                deleteProfileBtn.UpdateVisual();
             }
         }
         StringBuilder newProfileNameStrb = new StringBuilder();
@@ -49,11 +51,20 @@ namespace SE_ProjectorAlignmentProfiles
                     controlsAdded = true;
                     AddControls();
                 }
+
+                block.CustomDataChanged += Block_CustomDataChanged;
             }
+        }
+
+        private void Block_CustomDataChanged(IMyTerminalBlock block)
+        {
+            SelectedProfile = null;
+            profilesListbox.UpdateVisual();
         }
 
         static IMyTerminalControlListbox profilesListbox;
         static IMyTerminalControlButton loadProfileBtn;
+        static IMyTerminalControlButton deleteProfileBtn;
         static IMyTerminalControlTextbox profileNameTextbox;
         static IMyTerminalControlButton saveProfileBtn;
         static void AddControls()
@@ -72,8 +83,17 @@ namespace SE_ProjectorAlignmentProfiles
             loadProfileBtn.Enabled = b => ((IMyProjector)b).IsProjecting && b.GameLogic.GetAs<ProjectorLogic>().SelectedProfile.HasValue;
             loadProfileBtn.SupportsMultipleBlocks = false;
             loadProfileBtn.Title = MyStringId.GetOrCompute("Load Profile");
-            loadProfileBtn.Action = b => b.GameLogic.GetAs<ProjectorLogic>().ApplyAlignment();
+            loadProfileBtn.Tooltip = MyStringId.GetOrCompute("Load selected profile");
+            loadProfileBtn.Action = b => b.GameLogic.GetAs<ProjectorLogic>().ApplyProfile();
             MyAPIGateway.TerminalControls.AddControl<IMyProjector>(loadProfileBtn);
+
+            deleteProfileBtn = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyProjector>("DeleteProfileBtn");
+            deleteProfileBtn.Enabled = b => ((IMyProjector)b).IsProjecting && b.GameLogic.GetAs<ProjectorLogic>().SelectedProfile.HasValue;
+            deleteProfileBtn.SupportsMultipleBlocks = false;
+            deleteProfileBtn.Title = MyStringId.GetOrCompute("Delete Profile");
+            deleteProfileBtn.Tooltip = MyStringId.GetOrCompute("Delete selected profile");
+            deleteProfileBtn.Action = b => b.GameLogic.GetAs<ProjectorLogic>().DeleteProfile();
+            MyAPIGateway.TerminalControls.AddControl<IMyProjector>(deleteProfileBtn);
 
             profileNameTextbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlTextbox, IMyProjector>("ProfileNameTextbox");
             profileNameTextbox.Enabled = b => ((IMyProjector)b).IsProjecting;
@@ -92,13 +112,13 @@ namespace SE_ProjectorAlignmentProfiles
             saveProfileBtn.SupportsMultipleBlocks = false;
             saveProfileBtn.Title = MyStringId.GetOrCompute("Save Profile");
             saveProfileBtn.Tooltip = MyStringId.GetOrCompute("Save current projector settings");
-            saveProfileBtn.Action = b => b.GameLogic.GetAs<ProjectorLogic>().SaveAlignment();
+            saveProfileBtn.Action = b => b.GameLogic.GetAs<ProjectorLogic>().SaveProfile();
             MyAPIGateway.TerminalControls.AddControl<IMyProjector>(saveProfileBtn);
         }
 
         void ListContent(List<MyTerminalControlListBoxItem> items, List<MyTerminalControlListBoxItem> selected)
         {
-            string[] lines = block.CustomData.Split(Environment.NewLine.ToCharArray());
+            string[] lines = block.CustomData.Split(Newlines);
             bool match = false;
             foreach (string line in lines)
             {
@@ -127,7 +147,7 @@ namespace SE_ProjectorAlignmentProfiles
             this.SelectedProfile = (AlignData)selected[0].UserData;
         }
 
-        void ApplyAlignment()
+        void ApplyProfile()
         {
             if (SelectedProfile.HasValue)
             {
@@ -137,7 +157,27 @@ namespace SE_ProjectorAlignmentProfiles
             }
         }
 
-        void SaveAlignment()
+        void DeleteProfile()
+        {
+            if (SelectedProfile.HasValue && !string.IsNullOrWhiteSpace(block.CustomData))
+            {
+                StringBuilder newCD = new StringBuilder();
+                string[] lines = block.CustomData.Split(Newlines);
+                foreach (string line in lines)
+                {
+                    if (!line.StartsWith($"AlignProfile:{SelectedProfile.Value.Name}") && !string.IsNullOrWhiteSpace(line))
+                    {
+                        newCD.AppendLine(line);
+                    }
+                }
+                block.CustomData = newCD.ToString();
+
+                SelectedProfile = null;
+                profilesListbox.UpdateVisual();
+            }
+        }
+
+        void SaveProfile()
         {
             string newProfileNameStr = newProfileNameStrb.ToString();
             if (string.IsNullOrWhiteSpace(newProfileNameStr))
@@ -146,12 +186,12 @@ namespace SE_ProjectorAlignmentProfiles
             StringBuilder newCD = new StringBuilder();
             if (!string.IsNullOrWhiteSpace(block.CustomData))
             {
-                string[] lines = block.CustomData.Split(Environment.NewLine.ToCharArray());
-                for (int i = 0; i < lines.Length; i++)
+                string[] lines = block.CustomData.Split(Newlines);
+                foreach (string line in lines)
                 {
-                    if (!lines[i].StartsWith($"AlignProfile:{newProfileNameStr}") && lines[i] != "")
+                    if (!line.StartsWith($"AlignProfile:{newProfileNameStr}") && !string.IsNullOrWhiteSpace(line))
                     {
-                        newCD.AppendLine(lines[i]);
+                        newCD.AppendLine(line);
                     }
                 }
             }
@@ -206,7 +246,7 @@ namespace SE_ProjectorAlignmentProfiles
 
         public string GetToolTip()
         {
-            return $"X:{Offset.X} Y:{Offset.Y} Z:{Offset.Z} Pitch:{Rotation.X * 90} Yaw:{Rotation.Y * 90} Roll:{Rotation.Z * 90}";
+            return $"X:{Offset.X} Y:{Offset.Y} Z:{Offset.Z}\nPitch:{Rotation.X * 90} Yaw:{Rotation.Y * 90} Roll:{Rotation.Z * 90}";
         }
     }
 
